@@ -37,6 +37,9 @@ def read_csv(raw):
 def p_text(p):
     return 'p < 0,001' if p < .001 else f'p = {p:.3f}'.replace('.', ',')
 
+def pl_num(value, digits=3):
+    return f'{value:.{digits}f}'.replace('.', ',')
+
 def model_fit(x, y):
     return sm.OLS(y, sm.add_constant(x, has_constant='add')).fit()
 
@@ -179,6 +182,50 @@ elif section == 'Regresja prosta':
     st.write(f'F({int(model.df_model)}, {int(model.df_resid)}) = {model.fvalue:.3f}; {p_text(model.f_pvalue)}. Skorygowane R² = {model.rsquared_adj:.3f}.')
     st.caption('Dla regresji prostej z wyrazem wolnym R² = r².')
 
+    # Wyjaśnienia dydaktyczne: stopnie swobody i skorygowane R².
+    with st.expander('📘 Skąd pochodzą stopnie swobody (df) i czym jest skorygowane R²?', expanded=True):
+        n_obs = int(model.nobs)
+        st.markdown(f"""
+**Stopnie swobody (df)** informują, ile niezależnych informacji pozostaje do szacowania zmienności.
+W tym modelu mamy **n = {n_obs}** obserwacji i **jeden predyktor** X, a także wyraz wolny.
+
+- **df regresji = 1** — model ma jeden współczynnik kierunkowy.
+- **df reszt = n − 2 = {n_obs} − 2 = {int(model.df_resid)}** — oszacowano dwa parametry: wyraz wolny i nachylenie.
+- **df całkowite = n − 1 = {n_obs - 1}** — jeden stopień swobody zużywa oszacowanie średniej Y.
+
+Z tego powodu test całego modelu zapisujemy jako **F(1, {int(model.df_resid)})**.
+
+**R²** określa, jaka część zmienności Y jest wyjaśniona przez model. **Skorygowane R²** uwzględnia liczbę predyktorów i wielkość próby, dlatego jest przydatne przy porównywaniu modeli różniących się złożonością.
+""")
+        st.latex(r'R^2_{\mathrm{skor.}} = 1 - (1-R^2)\frac{n-1}{n-k-1}')
+        st.markdown(f"""
+Tutaj **k = 1** (jeden predyktor), **R² = {pl_num(model.rsquared)}**,
+a **skorygowane R² = {pl_num(model.rsquared_adj)}**.
+W odróżnieniu od zwykłego R², skorygowane R² może spaść po dodaniu predyktora,
+który wnosi zbyt mało informacji. Nie jest to jednak miara jakości prognoz na nowych danych.
+""")
+
+    st.markdown('### 📝 Automatyczny opis wyników w stylu APA')
+    direction = 'dodatnim' if model.params[1] > 0 else 'ujemnym' if model.params[1] < 0 else 'zerowym'
+    apa = (
+        f'Przeprowadzono regresję liniową prostą, w której zmienną zależną była {ycol}, '
+        f'a predyktorem {xcol} (N = {int(model.nobs)}). '
+        f'Model był {"istotny" if model.f_pvalue < .05 else "nieistotny"} statystycznie, '
+        f'F({int(model.df_model)}, {int(model.df_resid)}) = {pl_num(model.fvalue, 2)}, '
+        f'{p_text(model.f_pvalue)}, R² = {pl_num(model.rsquared)}, '
+        f'skorygowane R² = {pl_num(model.rsquared_adj)}. '
+        f'Współczynnik regresji dla {xcol} wyniósł '
+        f'B = {pl_num(model.params[1])}, SE = {pl_num(model.bse[1])}, '
+        f't({int(model.df_resid)}) = {pl_num(model.tvalues[1], 2)}, '
+        f'{p_text(model.pvalues[1])}. '
+        f'Zaobserwowano {direction} związek: wzrost {xcol} o jedną jednostkę '
+        f'wiązał się ze zmianą przewidywanej wartości {ycol} '
+        f'o {pl_num(model.params[1])} jednostki.'
+    )
+    st.write(apa)
+    st.caption('Opis aktualizuje się po zmianie danych. Do publikacji warto sprawdzić założenia modelu i zaokrąglenia.')
+
+
 elif section == 'Diagnostyka':
     st.subheader('🔍 Diagnostyka regresji')
     model = model_fit(x, y)
@@ -212,7 +259,46 @@ elif section == 'Diagnostyka':
     if st.checkbox('Pokaż odległość Cooka (dodatkowe obliczenie)'):
         cook = model.get_influence().cooks_distance[0]
         st.metric('Maksymalna odległość Cooka', f'{np.max(cook):.3f}')
-    st.markdown('Szukaj krzywizny, lejka, ekstremalnych punktów i odejść od prostej Q–Q. Niezależność obserwacji ocenia się również na podstawie projektu badania.')
+    with st.expander('📘 Jak interpretować wykresy diagnostyczne?', expanded=True):
+        st.markdown(r"""
+**Czym jest reszta?** Dla każdej obserwacji reszta to różnica między wartością zaobserwowaną a przewidywaną przez model:
+""")
+        st.latex(r'e_i = y_i - \hat{y}_i')
+        st.markdown("""
+**Wykres 1. Reszty a wartości przewidywane**
+
+- **Po co?** Pomaga ocenić liniowość związku i stałość wariancji reszt (homoskedastyczność).
+- **Oczekiwany obraz:** punkty tworzą przypadkową chmurę wokół poziomej linii 0, o podobnej szerokości na całej osi X.
+- **Sygnały ostrzegawcze:** łuk lub litera U może sugerować nieliniowość; lejek — zmieniającą się wariancję błędów; pojedyncze odległe punkty — obserwacje odstające.
+
+**Wykres 2. Q–Q reszt**
+
+- **Po co?** Pozwala wizualnie ocenić, czy rozkład reszt przypomina rozkład normalny.
+- **Oczekiwany obraz:** punkty przebiegają w przybliżeniu wzdłuż prostej odniesienia.
+- **Sygnały ostrzegawcze:** systematyczne wygięcie lub kształt S sugeruje odstępstwa od normalności; mocno odległe punkty na krańcach mogą wskazywać na ciężkie ogony lub obserwacje odstające.
+
+**Pamiętaj:** same wykresy nie dowodzą, że wszystkie założenia są spełnione. Niezależność obserwacji oceniamy przede wszystkim na podstawie sposobu zbierania danych. Wykresy dotyczą aktualnego modelu regresji prostej (tylko X), a nie modelu wielorakiego.
+""")
+    with st.expander('📏 Co oznacza RMSE?', expanded=True):
+        st.markdown("""
+**RMSE (Root Mean Squared Error)** to pierwiastek średniej z kwadratów reszt.
+Mierzy wielkość błędów dopasowania; jest wyrażony **w tych samych jednostkach co Y**.
+Im mniejszy RMSE dla tej samej zmiennej i tych samych obserwacji, tym mniejsze błędy dopasowania w próbie.
+""")
+        st.latex(r'\mathrm{RMSE} = \sqrt{\frac{1}{n}\sum_{i=1}^{n}(y_i-\hat{y}_i)^2}')
+        st.markdown(f"""
+W tym programie dzielimy sumę kwadratów reszt przez **n = {int(model.nobs)}**,
+a otrzymany wynik wynosi **{pl_num(np.sqrt(np.mean(residuals**2)))}** jednostek Y.
+Duże błędy mają szczególnie silny wpływ na RMSE, ponieważ są podnoszone do kwadratu.
+
+**Ważna różnica:** w części programów (np. w tabelach regresji JASP) podaje się
+pierwiastek z *MSE reszt*, gdzie mianownikiem jest **n − 2** dla regresji prostej.
+Ta wartość jest nieco większa niż RMSE z mianownikiem n.
+""")
+        st.metric('Pierwiastek z MSE reszt (mianownik n − 2)', f'{np.sqrt(model.mse_resid):.3f}')
+    # Odległość Cooka można wyświetlić na żądanie; opis pojawia się niezależnie od zaznaczenia.
+    st.caption('Odległość Cooka pomaga wykryć obserwacje silnie wpływające na parametry regresji. Duża wartość wymaga sprawdzenia obserwacji, nie automatycznego usunięcia.')
+
 
 elif section == 'Regresja wieloraka':
     st.subheader('➕ Regresja wieloraka – porównanie dwóch modeli')
