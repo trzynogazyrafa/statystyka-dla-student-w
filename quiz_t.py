@@ -2,7 +2,7 @@
 
 import streamlit as st
 
-st.set_page_config(page_title="Quiz – testy t-Studenta", page_icon="📊", layout="centered")
+st.set_page_config(page_title="Quiz – test t-Studenta", page_icon="📊", layout="centered")
 
 QUESTIONS = [
     {
@@ -170,8 +170,8 @@ QUESTIONS = [
 assert len(QUESTIONS) == 15
 
 st.title("📊 Quiz: testy t-Studenta")
-st.caption("15 pytań jednokrotnego wyboru • 1 punkt za poprawną odpowiedź • poziom α = 0,05, jeśli dotyczy")
-st.info("Quiz jest osobną aplikacją. Po zaznaczeniu odpowiedzi kliknij **Sprawdź odpowiedzi** na dole strony.")
+st.caption("15 pytań jednokrotnego wyboru • przyjmujemy poziom α = 0,05")
+st.info("Po zaznaczeniu odpowiedzi kliknij **Sprawdź odpowiedzi** na dole strony.")
 
 if "submitted" not in st.session_state:
     st.session_state.submitted = False
